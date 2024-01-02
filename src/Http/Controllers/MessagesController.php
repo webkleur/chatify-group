@@ -141,6 +141,8 @@ class MessagesController extends Controller
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
+
+            // todo: bug - fix this
             if (Auth::user()->id != $request['channel_id']) {
                 Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
                     'from_id' => Auth::user()->id,
@@ -214,33 +216,27 @@ class MessagesController extends Controller
     }
 
     /**
-     * Get contacts list
+     * Get contacts list (list of channels)
      *
      * @param Request $request
      * @return JsonResponse
      */
     public function getContacts(Request $request)
     {
-        $query = Message::join('users',  function ($join) {
-            $join->on('ch_messages.from_id', '=', 'users.id')
-                ->orOn('ch_messages.to_channel_id', '=', 'users.id');
-        })
-        ->join('ch_channels', 'ch_messages.to_channel_id', '=', 'ch_channels.id')
-        ->where(function ($q) {
-            $q->where('ch_messages.from_id', Auth::user()->id)
-            ->orWhere('ch_messages.to_channel_id', Auth::user()->id);
-        })
-        ->where('users.id','!=',Auth::user()->id)
-        ->select('ch_channels.*', 'users.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
-        ->orderBy('max_created_at', 'desc')
+        $query = Channel::join('ch_messages', 'ch_channels.id', '=', 'ch_messages.to_channel_id')
+        ->join('chatify_channel_user', 'ch_channels.id', '=', 'chatify_channel_user.channel_id')
+        ->where('chatify_channel_user.user_id','=',Auth::user()->id)
+        ->select('ch_channels.*', DB::raw('ch_messages.created_at messaged_at'))
+        ->groupBy('ch_channels.id')
+        ->orderBy('messaged_at', 'desc')
         ->paginate($request->per_page ?? $this->perPage);
 
-        $usersList = $query->items();
+        $channelsList = $query->items();
 
-        if (count($usersList) > 0) {
+        if (count($channelsList) > 0) {
             $contacts = '';
-            foreach ($usersList as $user) {
-                $contacts .= Chatify::getContactItem($user);
+            foreach ($channelsList as $channel) {
+                $contacts .= Chatify::getContactItem($channel);
             }
         } else {
             $contacts = '<p class="message-hint center-el"><span>Your contact list is empty</span></p>';

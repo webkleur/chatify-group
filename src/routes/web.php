@@ -46,7 +46,7 @@ Route::post('/chat/auth', 'MessagesController@pusherAuth')->name('pusher.auth');
 Route::post('/makeSeen', 'MessagesController@seen')->name('messages.seen');
 
 /**
- * Get contacts
+ * Get contacts / list of channels
  */
 Route::get('/getContacts', 'MessagesController@getContacts')->name('contacts.get');
 

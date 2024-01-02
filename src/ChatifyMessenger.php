@@ -259,13 +259,15 @@ class ChatifyMessenger
     }
 
     /**
-     * Get user list's item data [Contact Itme]
+     * Get user list's item data [Contact Item]
      * (e.g. User data, Last message, Unseen Counter...)
      *
      * @param int $messenger_id
      * @param Collection $channel
      * @return string
      */
+
+//    check this
     public function getContactItem($channel)
     {
         try {
