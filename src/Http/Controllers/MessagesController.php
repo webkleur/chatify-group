@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Response;
 use App\Models\User;
 use App\Models\ChMessage as Message;
 use App\Models\ChFavorite as Favorite;
+use App\Models\ChChannel as Channel;
 use Chatify\Facades\ChatifyMessenger as Chatify;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,14 +38,14 @@ class MessagesController extends Controller
     /**
      * Returning the view of the app with the required data.
      *
-     * @param int $id
+     * @param string $channel_id
      * @return \Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\View\Factory|\Illuminate\Contracts\View\View
      */
-    public function index( $id = null)
+    public function index($channel_id = null)
     {
         $messenger_color = Auth::user()->messenger_color;
         return view('Chatify::pages.app', [
-            'id' => $id ?? 0,
+            'channel_id' => $channel_id ?? 0,
             'messengerColor' => $messenger_color ? $messenger_color : Chatify::getFallbackColor(),
             'dark_mode' => Auth::user()->dark_mode < 1 ? 'light' : 'dark',
         ]);
@@ -59,8 +60,8 @@ class MessagesController extends Controller
      */
     public function idFetchData(Request $request)
     {
-        $favorite = Chatify::inFavorite($request['id']);
-        $fetch = User::where('id', $request['id'])->first();
+        $favorite = Chatify::inFavorite($request['channel_id']);
+        $fetch = Chatify::getUserInOneChannel($request['channel_id']);
         if($fetch){
             $userAvatar = Chatify::getUserWithAvatar($fetch)->avatar;
         }
@@ -132,7 +133,7 @@ class MessagesController extends Controller
         if (!$error->status) {
             $message = Chatify::newMessage([
                 'from_id' => Auth::user()->id,
-                'to_id' => $request['id'],
+                'to_channel_id' => $request['channel_id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'attachment' => ($attachment) ? json_encode((object)[
                     'new_name' => $attachment,
@@ -140,10 +141,10 @@ class MessagesController extends Controller
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
-            if (Auth::user()->id != $request['id']) {
-                Chatify::push("private-chatify.".$request['id'], 'messaging', [
+            if (Auth::user()->id != $request['channel_id']) {
+                Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
                     'from_id' => Auth::user()->id,
-                    'to_id' => $request['id'],
+                    'to_channel_id' => $request['channel_id'],
                     'message' => Chatify::messageCard($messageData, true)
                 ]);
             }
@@ -205,11 +206,11 @@ class MessagesController extends Controller
     public function seen(Request $request)
     {
         // make as seen
-        $seen = Chatify::makeSeen($request['id']);
-        // send the response
-        return Response::json([
-            'status' => $seen,
-        ], 200);
+//        $seen = Chatify::makeSeen($request['id']);
+//        // send the response
+//        return Response::json([
+//            'status' => $seen,
+//        ], 200);
     }
 
     /**
@@ -220,22 +221,21 @@ class MessagesController extends Controller
      */
     public function getContacts(Request $request)
     {
-        // get all users that received/sent message from/to [Auth user]
-        $users = Message::join('users',  function ($join) {
+        $query = Message::join('users',  function ($join) {
             $join->on('ch_messages.from_id', '=', 'users.id')
-                ->orOn('ch_messages.to_id', '=', 'users.id');
+                ->orOn('ch_messages.to_channel_id', '=', 'users.id');
         })
+        ->join('ch_channels', 'ch_messages.to_channel_id', '=', 'ch_channels.id')
         ->where(function ($q) {
             $q->where('ch_messages.from_id', Auth::user()->id)
-            ->orWhere('ch_messages.to_id', Auth::user()->id);
+            ->orWhere('ch_messages.to_channel_id', Auth::user()->id);
         })
         ->where('users.id','!=',Auth::user()->id)
-        ->select('users.*',DB::raw('MAX(ch_messages.created_at) max_created_at'))
+        ->select('ch_channels.*', 'users.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
         ->orderBy('max_created_at', 'desc')
-        ->groupBy('users.id')
         ->paginate($request->per_page ?? $this->perPage);
 
-        $usersList = $users->items();
+        $usersList = $query->items();
 
         if (count($usersList) > 0) {
             $contacts = '';
@@ -248,8 +248,8 @@ class MessagesController extends Controller
 
         return Response::json([
             'contacts' => $contacts,
-            'total' => $users->total() ?? 0,
-            'last_page' => $users->lastPage() ?? 1,
+            'total' => $query->total() ?? 0,
+            'last_page' => $query->lastPage() ?? 1,
         ], 200);
     }
 
@@ -261,33 +261,52 @@ class MessagesController extends Controller
      */
     public function updateContactItem(Request $request)
     {
+		$channel_id = $request['channel_id'];
+		
         // Get user data
-        $user = User::where('id', $request['user_id'])->first();
-        if(!$user){
+        $channel = Channel::find($channel_id);
+        if(!$channel){
             return Response::json([
-                'message' => 'User not found!',
+                'message' => 'Channel not found!',
             ], 401);
         }
-        $contactItem = Chatify::getContactItem($user);
+        $contactItem = Chatify::getContactItem($channel);
 
         // send the response
         return Response::json([
             'contactItem' => $contactItem,
         ], 200);
     }
-
+	
+	/**
+	 * Get channel_id by get or create new channel
+	 *
+	 * @param Request $request
+	 * @return JsonResponse|void
+	 */
+	public function getChannelId(Request $request)
+	{
+		$user_id = $request['user_id'];
+		$channel_id = Chatify::getOrCreateChannel($user_id);
+		
+		// send the response
+		return Response::json([
+			'channel_id' => $channel_id,
+		], 200);
+	}
+	
     /**
-     * Put a user in the favorites list
+     * Put a channel in the favorites list
      *
      * @param Request $request
      * @return JsonResponse|void
      */
     public function favorite(Request $request)
     {
-        $userId = $request['user_id'];
+        $channel_id = $request['channel_id'];
         // check action [star/unstar]
-        $favoriteStatus = Chatify::inFavorite($userId) ? 0 : 1;
-        Chatify::makeInFavorite($userId, $favoriteStatus);
+        $favoriteStatus = Chatify::inFavorite($channel_id) ? 0 : 1;
+        Chatify::makeInFavorite($channel_id, $favoriteStatus);
 
         // send the response
         return Response::json([
@@ -350,8 +369,39 @@ class MessagesController extends Controller
             'last_page' => $records->lastPage()
         ], 200);
     }
+	
+	/**
+	 * Search users
+	 *
+	 * @param Request $request
+	 * @return JsonResponse|void
+	 */
+	public function searchUsers(Request $request)
+	{
+		$getRecords = null;
+		$input = trim(filter_var($request['input']));
+		$records = User::where('id','!=',Auth::user()->id)
+			->where('name', 'LIKE', "%{$input}%")
+			->paginate($request->per_page ?? $this->perPage);
+		foreach ($records->items() as $record) {
+			$getRecords .= view('Chatify::layouts.listItem', [
+				'get' => 'user_search_item',
+				'user' => Chatify::getUserWithAvatar($record),
+			])->render();
+		}
+		if($records->total() < 1){
+			$getRecords = '<p class="message-hint"><span>Nothing to show.</span></p>';
+		}
+		// send the response
+		return Response::json([
+			'records' => $getRecords,
+			'total' => $records->total(),
+			'last_page' => $records->lastPage()
+		], 200);
+	}
 
-    /**
+	
+	/**
      * Get shared photos
      *
      * @param Request $request
@@ -359,7 +409,7 @@ class MessagesController extends Controller
      */
     public function sharedPhotos(Request $request)
     {
-        $shared = Chatify::getSharedPhotos($request['user_id']);
+        $shared = Chatify::getSharedPhotos($request['channel_id']);
         $sharedPhotos = null;
 
         // shared with its template

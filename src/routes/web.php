@@ -55,6 +55,10 @@ Route::get('/getContacts', 'MessagesController@getContacts')->name('contacts.get
  */
 Route::post('/updateContacts', 'MessagesController@updateContactItem')->name('contacts.update');
 
+/**
+ * Get channel_id by user_id
+ */
+Route::post('/get-channel-id', 'MessagesController@getChannelId')->name('get-channel-id');
 
 /**
  * Star in favorite list
@@ -70,6 +74,11 @@ Route::post('/favorites', 'MessagesController@getFavorites')->name('favorites');
  * Search in messenger
  */
 Route::get('/search', 'MessagesController@search')->name('search');
+
+/**
+ * Search users
+ */
+Route::get('/search-users', 'MessagesController@searchUsers')->name('search.users');
 
 /**
  * Get shared photos
@@ -100,19 +109,7 @@ Route::post('/setActiveStatus', 'MessagesController@setActiveStatus')->name('act
 
 
 
-
-/*
-* [Group] view by id
-*/
-Route::get('/group/{id}', 'MessagesController@index')->name('group');
-
-/*
-* user view by id.
-* Note : If you added routes after the [User] which is the below one,
-* it will considered as user id.
-*
-* e.g. - The commented routes below :
-*/
-// Route::get('/route', function(){ return 'Munaf'; }); // works as a route
-Route::get('/{id}', 'MessagesController@index')->name('user');
-// Route::get('/route', function(){ return 'Munaf'; }); // works as a user id
+/**
+ * Channel id
+ */
+Route::get('/{channel_id}', 'MessagesController@index')->name('channel_id');

@@ -4,9 +4,13 @@ namespace Chatify;
 
 use App\Models\ChMessage as Message;
 use App\Models\ChFavorite as Favorite;
+use App\Models\ChChannel as Channel;
+use App\Models\User;
 use Illuminate\Support\Facades\Storage;
-use Pusher\Pusher;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Pusher\Pusher;
 use Exception;
 
 class ChatifyMessenger
@@ -155,7 +159,7 @@ class ChatifyMessenger
         return [
             'id' => $msg->id,
             'from_id' => $msg->from_id,
-            'to_id' => $msg->to_id,
+            'to_channel_id' => $msg->to_channel_id,
             'message' => $msg->body,
             'attachment' => (object) [
                 'file' => $attachment,
@@ -190,13 +194,12 @@ class ChatifyMessenger
     /**
      * Default fetch messages query between a Sender and Receiver.
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return Message|\Illuminate\Database\Eloquent\Builder
      */
-    public function fetchMessagesQuery($user_id)
+    public function fetchMessagesQuery($channel_id)
     {
-        return Message::where('from_id', Auth::user()->id)->where('to_id', $user_id)
-                    ->orWhere('from_id', $user_id)->where('to_id', Auth::user()->id);
+        return Message::where('to_channel_id', $channel_id);
     }
 
     /**
@@ -209,7 +212,7 @@ class ChatifyMessenger
     {
         $message = new Message();
         $message->from_id = $data['from_id'];
-        $message->to_id = $data['to_id'];
+        $message->to_channel_id = $data['to_channel_id'];
         $message->body = $data['body'];
         $message->attachment = $data['attachment'];
         $message->save();
@@ -226,7 +229,7 @@ class ChatifyMessenger
     public function makeSeen($user_id)
     {
         Message::Where('from_id', $user_id)
-                ->where('to_id', Auth::user()->id)
+                ->where('to_channel_id', Auth::user()->id)
                 ->where('seen', 0)
                 ->update(['seen' => 1]);
         return 1;
@@ -235,12 +238,12 @@ class ChatifyMessenger
     /**
      * Get last message for a specific user
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return Message|Collection|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Model|object|null
      */
-    public function getLastMessageQuery($user_id)
+    public function getLastMessageQuery($channel_id)
     {
-        return $this->fetchMessagesQuery($user_id)->latest()->first();
+        return $this->fetchMessagesQuery($channel_id)->latest()->first();
     }
 
     /**
@@ -249,9 +252,10 @@ class ChatifyMessenger
      * @param int $user_id
      * @return Collection
      */
+	// TODO: unseen is wrong
     public function countUnseenMessages($user_id)
     {
-        return Message::where('from_id', $user_id)->where('to_id', Auth::user()->id)->where('seen', 0)->count();
+        return Message::where('from_id', $user_id)->where('to_channel_id', Auth::user()->id)->where('seen', 0)->count();
     }
 
     /**
@@ -259,16 +263,20 @@ class ChatifyMessenger
      * (e.g. User data, Last message, Unseen Counter...)
      *
      * @param int $messenger_id
-     * @param Collection $user
+     * @param Collection $channel
      * @return string
      */
-    public function getContactItem($user)
+    public function getContactItem($channel)
     {
         try {
-            // get last message
-            $lastMessage = $this->getLastMessageQuery($user->id);
+			$user = $this->getUserInOneChannel($channel->id);
+            $lastMessage = $this->getLastMessageQuery($channel->id);
+			
             // Get Unseen messages counter
-            $unseenCounter = $this->countUnseenMessages($user->id);
+//            $unseenCounter = $this->countUnseenMessages($channel->id);
+	        // TODO: fix this
+	        $unseenCounter = 1;
+			
             if ($lastMessage) {
                 $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
                 $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
@@ -301,39 +309,80 @@ class ChatifyMessenger
         }
         return $user;
     }
+	
+	/**
+	 * Get user in on channel
+	 *
+	 * @param int $user_id
+	 * @return string
+	 */
+	public function getOrCreateChannel(int $user_id)
+	{
+		$channel_user = DB::table('chatify_channel_user')
+			->select('chatify_channel_user.channel_id', DB::raw('count(chatify_channel_user.user_id) as count_user'))
+			->whereIn('chatify_channel_user.user_id', [$user_id, Auth::user()->id])
+			->groupBy('chatify_channel_user.channel_id')
+			->having('count_user', '=', 2)
+			->first();
+		
+		if(!isset($channel_user)){
+			$new_channel = new Channel();
+			$new_channel->save();
+			
+			$new_channel->users()->sync([$user_id, Auth::user()->id]);
+			
+			return $new_channel->id;
+		}
+		
+		return $channel_user->channel_id;
+	}
+	
+	/**
+	 * Get user in on channel
+	 *
+	 * @param string $channel_id
+	 * @return Collection
+	 */
+	public function getUserInOneChannel(string $channel_id)
+	{
+		return User::where('id', '!=', Auth::user()->id)
+			->join('chatify_channel_user', 'users.id', '=', 'chatify_channel_user.user_id')
+			->where('chatify_channel_user.channel_id', $channel_id)
+			->select('users.*')
+			->first();
+	}
 
     /**
      * Check if a user in the favorite list
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return boolean
      */
-    public function inFavorite($user_id)
+    public function inFavorite($channel_id)
     {
         return Favorite::where('user_id', Auth::user()->id)
-                        ->where('favorite_id', $user_id)->count() > 0
-                        ? true : false;
+                        ->where('favorite_id', $channel_id)->count() > 0;
     }
 
     /**
      * Make user in favorite list
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @param int $star
      * @return boolean
      */
-    public function makeInFavorite($user_id, $action)
+    public function makeInFavorite($channel_id, $action)
     {
         if ($action > 0) {
             // Star
             $star = new Favorite();
             $star->user_id = Auth::user()->id;
-            $star->favorite_id = $user_id;
+            $star->favorite_id = $channel_id;
             $star->save();
             return $star ? true : false;
         } else {
             // UnStar
-            $star = Favorite::where('user_id', Auth::user()->id)->where('favorite_id', $user_id)->delete();
+            $star = Favorite::where('user_id', Auth::user()->id)->where('favorite_id', $channel_id)->delete();
             return $star ? true : false;
         }
     }
@@ -341,14 +390,14 @@ class ChatifyMessenger
     /**
      * Get shared photos of the conversation
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return array
      */
-    public function getSharedPhotos($user_id)
+    public function getSharedPhotos($channel_id)
     {
         $images = array(); // Default
         // Get messages
-        $msgs = $this->fetchMessagesQuery($user_id)->orderBy('created_at', 'DESC');
+        $msgs = $this->fetchMessagesQuery($channel_id)->orderBy('created_at', 'DESC');
         if ($msgs->count() > 0) {
             foreach ($msgs->get() as $msg) {
                 // If message has attachment
@@ -366,13 +415,13 @@ class ChatifyMessenger
     /**
      * Delete Conversation
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return boolean
      */
-    public function deleteConversation($user_id)
+    public function deleteConversation($channel_id)
     {
         try {
-            foreach ($this->fetchMessagesQuery($user_id)->get() as $msg) {
+            foreach ($this->fetchMessagesQuery($channel_id)->get() as $msg) {
                 // delete file attached if exist
                 if (isset($msg->attachment)) {
                     $path = config('chatify.attachments.folder').'/'.json_decode($msg->attachment)->new_name;
