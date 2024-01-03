@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Request as FacadesRequest;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+
 class MessagesController extends Controller
 {
     protected $perPage = 30;
@@ -142,14 +144,13 @@ class MessagesController extends Controller
             ]);
             $messageData = Chatify::parseMessage($message);
 
-            // todo: bug - fix this
-            if (Auth::user()->id != $request['channel_id']) {
+//            if(Chatify::inChannel(Auth::user()->id, $request['channel_id'])){
                 Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
                     'from_id' => Auth::user()->id,
                     'to_channel_id' => $request['channel_id'],
                     'message' => Chatify::messageCard($messageData, true)
                 ]);
-            }
+//            }
         }
 
         // send the response
@@ -430,7 +431,7 @@ class MessagesController extends Controller
     public function deleteConversation(Request $request)
     {
         // delete
-        $delete = Chatify::deleteConversation($request['id']);
+        $delete = Chatify::deleteConversation($request['channel_id']);
 
         // send the response
         return Response::json([

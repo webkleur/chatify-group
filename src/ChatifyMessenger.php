@@ -284,7 +284,8 @@ class ChatifyMessenger
                 $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
             }
             return view('Chatify::layouts.listItem', [
-                'get' => 'users',
+                'get' => 'contacts',
+                'channel' => $channel,
                 'user' => $this->getUserWithAvatar($user),
                 'lastMessage' => $lastMessage,
                 'unseenCounter' => $unseenCounter,
@@ -355,7 +356,22 @@ class ChatifyMessenger
 	}
 
     /**
-     * Check if a user in the favorite list
+     * Check if a user in the channel
+     *
+     * @param string $channel_id
+     * @param int $user_id
+     * @return boolean
+     */
+    public function inChannel(int $user_id, string $channel_id)
+    {
+        return DB::table('chatify_channel_user')
+            ->where('user_id', $user_id)
+            ->where('channel_id', $channel_id)
+            ->count() > 0;
+    }
+
+    /**
+     * Check if a channel in the favorite list
      *
      * @param string $channel_id
      * @return boolean
