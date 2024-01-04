@@ -314,16 +314,18 @@ class MessagesController extends Controller
      * @param Request $request
      * @return JsonResponse|void
      */
-    // todo: favorite
     public function getFavorites(Request $request)
     {
         $favoritesList = null;
         $favorites = Favorite::where('user_id', Auth::user()->id);
         foreach ($favorites->get() as $favorite) {
+            $channel_id = $favorite->favorite_id;
+
             // get user data
-            $user = User::where('id', $favorite->favorite_id)->first();
+            $user = Chatify::getUserInOneChannel($channel_id);
             $favoritesList .= view('Chatify::layouts.favorite', [
                 'user' => $user,
+                'channel_id' => $channel_id
             ]);
         }
         // send the response

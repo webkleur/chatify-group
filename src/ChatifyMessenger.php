@@ -282,8 +282,6 @@ class ChatifyMessenger
      * @param Collection $channel
      * @return string
      */
-
-//    check this
     public function getContactItem($channel)
     {
         try {
