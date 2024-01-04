@@ -285,10 +285,10 @@ class ChatifyMessenger
     public function getContactItem($channel)
     {
         try {
+            if($channel->id == Auth::user()->channel_id) return '';
+
 			$user = $this->getUserInOneChannel($channel->id);
             $lastMessage = $this->getLastMessageQuery($channel->id);
-
-            // Get Unseen messages counter
             $unseenCounter = $this->countUnseenMessages($channel->id);
             if ($lastMessage) {
                 $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
@@ -323,7 +323,23 @@ class ChatifyMessenger
         }
         return $user;
     }
-	
+
+    /**
+     * Create Personal Channel
+     *
+     * @return string
+     */
+    public function createPersonalChannel(){
+        $new_channel = new Channel();
+        $new_channel->save();
+
+        $new_channel->users()->sync([Auth::user()->id]);
+        Auth::user()->channel_id = $new_channel->id;
+        Auth::user()->save();
+
+        return $new_channel->id;
+    }
+
 	/**
 	 * Get user in on channel
 	 *
@@ -359,6 +375,8 @@ class ChatifyMessenger
 	 */
 	public function getUserInOneChannel(string $channel_id)
 	{
+        if($channel_id == Auth::user()->channel_id) return Auth::user();
+
 		return User::where('id', '!=', Auth::user()->id)
 			->join('ch_channel_user', 'users.id', '=', 'ch_channel_user.user_id')
 			->where('ch_channel_user.channel_id', $channel_id)

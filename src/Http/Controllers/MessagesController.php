@@ -46,6 +46,11 @@ class MessagesController extends Controller
     public function index($channel_id = null)
     {
         $messenger_color = Auth::user()->messenger_color;
+
+        if(!Auth::user()->channel_id){
+            Chatify::createPersonalChannel();
+        }
+
         return view('Chatify::pages.app', [
             'channel_id' => $channel_id ?? 0,
             'messengerColor' => $messenger_color ? $messenger_color : Chatify::getFallbackColor(),
@@ -222,12 +227,12 @@ class MessagesController extends Controller
     public function getContacts(Request $request)
     {
         $query = Channel::join('ch_messages', 'ch_channels.id', '=', 'ch_messages.to_channel_id')
-        ->join('ch_channel_user', 'ch_channels.id', '=', 'ch_channel_user.channel_id')
-        ->where('ch_channel_user.user_id','=',Auth::user()->id)
-        ->select('ch_channels.*', DB::raw('ch_messages.created_at messaged_at'))
-        ->groupBy('ch_channels.id')
-        ->orderBy('messaged_at', 'desc')
-        ->paginate($request->per_page ?? $this->perPage);
+            ->join('ch_channel_user', 'ch_channels.id', '=', 'ch_channel_user.channel_id')
+            ->where('ch_channel_user.user_id','=',Auth::user()->id)
+            ->select('ch_channels.*', DB::raw('ch_messages.created_at messaged_at'))
+            ->groupBy('ch_channels.id')
+            ->orderBy('messaged_at', 'desc')
+            ->paginate($request->per_page ?? $this->perPage);
 
         $channelsList = $query->items();
 
