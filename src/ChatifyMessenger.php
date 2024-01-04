@@ -223,15 +223,25 @@ class ChatifyMessenger
      * Make messages between the sender [Auth user] and
      * the receiver [User id] as seen.
      *
-     * @param int $user_id
+     * @param string $channel_id
      * @return bool
      */
-    public function makeSeen($user_id)
+    public function makeSeen($channel_id)
     {
-        Message::Where('from_id', $user_id)
-                ->where('to_channel_id', Auth::user()->id)
-                ->where('seen', 0)
-                ->update(['seen' => 1]);
+        $auth_id = Auth::user()->id;
+        $messages = Message::where('to_channel_id', $channel_id)
+            ->where('from_id', '<>', $auth_id)
+            ->where(function($query) use ($auth_id) {
+                $query->whereJsonDoesntContain('seen', $auth_id)
+                    ->orWhereNull('seen');
+            })
+            ->get();
+
+        foreach ($messages as $mess){
+            $mess->seen = !$mess->seen ? array($auth_id) : array_merge($mess->seen, array($auth_id));
+            $mess->save();
+        }
+
         return 1;
     }
 
@@ -249,13 +259,19 @@ class ChatifyMessenger
     /**
      * Count Unseen messages
      *
-     * @param int $user_id
-     * @return Collection
+     * @param string $channel_id
+     * @return numeric
      */
-	// TODO: unseen is wrong
-    public function countUnseenMessages($user_id)
+    public function countUnseenMessages(string $channel_id)
     {
-        return Message::where('from_id', $user_id)->where('to_channel_id', Auth::user()->id)->where('seen', 0)->count();
+        $auth_id = Auth::user()->id;
+        return Message::where('to_channel_id', $channel_id)
+            ->where('from_id', '<>', $auth_id)
+            ->where(function($query) use ($auth_id) {
+                $query->whereJsonDoesntContain('seen', $auth_id)
+                    ->orWhereNull('seen');
+            })
+            ->count();
     }
 
     /**
@@ -273,12 +289,9 @@ class ChatifyMessenger
         try {
 			$user = $this->getUserInOneChannel($channel->id);
             $lastMessage = $this->getLastMessageQuery($channel->id);
-			
+
             // Get Unseen messages counter
-//            $unseenCounter = $this->countUnseenMessages($channel->id);
-	        // TODO: fix this
-	        $unseenCounter = 1;
-			
+            $unseenCounter = $this->countUnseenMessages($channel->id);
             if ($lastMessage) {
                 $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
                 $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
@@ -321,10 +334,10 @@ class ChatifyMessenger
 	 */
 	public function getOrCreateChannel(int $user_id)
 	{
-		$channel_user = DB::table('chatify_channel_user')
-			->select('chatify_channel_user.channel_id', DB::raw('count(chatify_channel_user.user_id) as count_user'))
-			->whereIn('chatify_channel_user.user_id', [$user_id, Auth::user()->id])
-			->groupBy('chatify_channel_user.channel_id')
+		$channel_user = DB::table('ch_channel_user')
+			->select('ch_channel_user.channel_id', DB::raw('count(ch_channel_user.user_id) as count_user'))
+			->whereIn('ch_channel_user.user_id', [$user_id, Auth::user()->id])
+			->groupBy('ch_channel_user.channel_id')
 			->having('count_user', '=', 2)
 			->first();
 		
@@ -349,8 +362,8 @@ class ChatifyMessenger
 	public function getUserInOneChannel(string $channel_id)
 	{
 		return User::where('id', '!=', Auth::user()->id)
-			->join('chatify_channel_user', 'users.id', '=', 'chatify_channel_user.user_id')
-			->where('chatify_channel_user.channel_id', $channel_id)
+			->join('ch_channel_user', 'users.id', '=', 'ch_channel_user.user_id')
+			->where('ch_channel_user.channel_id', $channel_id)
 			->select('users.*')
 			->first();
 	}
@@ -364,7 +377,7 @@ class ChatifyMessenger
      */
     public function inChannel(int $user_id, string $channel_id)
     {
-        return DB::table('chatify_channel_user')
+        return DB::table('ch_channel_user')
             ->where('user_id', $user_id)
             ->where('channel_id', $channel_id)
             ->count() > 0;

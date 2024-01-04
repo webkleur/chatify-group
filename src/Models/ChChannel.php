@@ -10,6 +10,6 @@ class ChChannel extends Model
 {
     use UUID;
 	public function users(){
-		return $this->belongsToMany(User::class, 'chatify_channel_user', 'channel_id', 'user_id');
+		return $this->belongsToMany(User::class, 'ch_channel_user', 'channel_id', 'user_id');
 	}
 }

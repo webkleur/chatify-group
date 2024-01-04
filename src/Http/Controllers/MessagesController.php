@@ -143,14 +143,11 @@ class MessagesController extends Controller
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
-
-//            if(Chatify::inChannel(Auth::user()->id, $request['channel_id'])){
-                Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
-                    'from_id' => Auth::user()->id,
-                    'to_channel_id' => $request['channel_id'],
-                    'message' => Chatify::messageCard($messageData, true)
-                ]);
-//            }
+            Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
+                'from_id' => Auth::user()->id,
+                'to_channel_id' => $request['channel_id'],
+                'message' => Chatify::messageCard($messageData, true)
+            ]);
         }
 
         // send the response
@@ -209,11 +206,11 @@ class MessagesController extends Controller
     public function seen(Request $request)
     {
         // make as seen
-//        $seen = Chatify::makeSeen($request['id']);
-//        // send the response
-//        return Response::json([
-//            'status' => $seen,
-//        ], 200);
+        $seen = Chatify::makeSeen($request['channel_id']);
+        // send the response
+        return Response::json([
+            'status' => $seen,
+        ], 200);
     }
 
     /**
@@ -225,8 +222,8 @@ class MessagesController extends Controller
     public function getContacts(Request $request)
     {
         $query = Channel::join('ch_messages', 'ch_channels.id', '=', 'ch_messages.to_channel_id')
-        ->join('chatify_channel_user', 'ch_channels.id', '=', 'chatify_channel_user.channel_id')
-        ->where('chatify_channel_user.user_id','=',Auth::user()->id)
+        ->join('ch_channel_user', 'ch_channels.id', '=', 'ch_channel_user.channel_id')
+        ->where('ch_channel_user.user_id','=',Auth::user()->id)
         ->select('ch_channels.*', DB::raw('ch_messages.created_at messaged_at'))
         ->groupBy('ch_channels.id')
         ->orderBy('messaged_at', 'desc')
@@ -317,6 +314,7 @@ class MessagesController extends Controller
      * @param Request $request
      * @return JsonResponse|void
      */
+    // todo: favorite
     public function getFavorites(Request $request)
     {
         $favoritesList = null;
