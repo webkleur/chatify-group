@@ -135,20 +135,26 @@ class ChatifyMessenger
      * @param int $id
      * @return array
      */
-    public function parseMessage($prefetchedMessage = null, $id = null)
+    public function parseMessage($prefetchedMessage = null, $id = null, $loadUserInfo = true)
     {
         $msg = null;
         $attachment = null;
         $attachment_type = null;
         $attachment_title = null;
+
         if (!!$prefetchedMessage) {
             $msg = $prefetchedMessage;
         } else {
-            $msg = Message::where('id', $id)->first();
+            $msg = Message::where('id', $id)
+                ->join('users', 'ch_messages.from_id', 'users.id')
+                // load user info
+                ->select('ch_messages.*', 'users.name as user_name', 'users.email as user_email', 'users.avatar as user_avatar')
+                ->first();
             if(!$msg){
                 return [];
             }
         }
+
         if (isset($msg->attachment)) {
             $attachmentOBJ = json_decode($msg->attachment);
             $attachment = $attachmentOBJ->new_name;
@@ -156,6 +162,7 @@ class ChatifyMessenger
             $ext = pathinfo($attachment, PATHINFO_EXTENSION);
             $attachment_type = in_array($ext, $this->getAllowedImages()) ? 'image' : 'file';
         }
+
         return [
             'id' => $msg->id,
             'from_id' => $msg->from_id,
@@ -170,6 +177,12 @@ class ChatifyMessenger
             'created_at' => $msg->created_at->toIso8601String(),
             'isSender' => ($msg->from_id == Auth::user()->id),
             'seen' => $msg->seen,
+            'user' => $this->getUserWithAvatar((object)[
+                'avatar' => $msg->user_avatar,
+                'name' => $msg->user_name,
+                'email' => $msg->user_email,
+            ]),
+            'loadUserInfo' => $loadUserInfo
         ];
     }
 
@@ -199,7 +212,10 @@ class ChatifyMessenger
      */
     public function fetchMessagesQuery($channel_id)
     {
-        return Message::where('to_channel_id', $channel_id);
+        return Message::where('to_channel_id', $channel_id)
+            ->join('users', 'ch_messages.from_id', 'users.id')
+            // load user info
+            ->select('ch_messages.*', 'users.name as user_name', 'users.email as user_email', 'users.id as user_id', 'users.avatar as user_avatar');
     }
 
     /**
@@ -287,14 +303,15 @@ class ChatifyMessenger
         if($channel->id == Auth::user()->channel_id) return ''; // myself channel | saved messages
 
         try {
+            $lastMessage = $this->getLastMessageQuery($channel->id);
+            $unseenCounter = $this->countUnseenMessages($channel->id);
+            if ($lastMessage) {
+                $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
+                $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
+            }
+
             // check if this channel is a group
             if(isset($channel->owner_id)){
-                $lastMessage = $this->getLastMessageQuery($channel->id);
-                $unseenCounter = $this->countUnseenMessages($channel->id);
-                if ($lastMessage) {
-                    $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
-                    $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
-                }
                 return view('Chatify::layouts.listItem', [
                     'get' => 'contact-group',
                     'channel' => $this->getChannelWithAvatar($channel),
@@ -303,12 +320,7 @@ class ChatifyMessenger
                 ])->render();
             } else {
                 $user = $this->getUserInOneChannel($channel->id);
-                $lastMessage = $this->getLastMessageQuery($channel->id);
-                $unseenCounter = $this->countUnseenMessages($channel->id);
-                if ($lastMessage) {
-                    $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
-                    $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
-                }
+
                 return view('Chatify::layouts.listItem', [
                     'get' => 'contact-user',
                     'channel' => $channel,
@@ -387,19 +399,19 @@ class ChatifyMessenger
 			->groupBy('ch_channel_user.channel_id')
 			->having('count_user', '=', 2)
 			->first();
-		
+
 		if(!isset($channel_user)){
 			$new_channel = new Channel();
 			$new_channel->save();
-			
+
 			$new_channel->users()->sync([$user_id, Auth::user()->id]);
-			
+
 			return $new_channel->id;
 		}
-		
+
 		return $channel_user->channel_id;
 	}
-	
+
 	/**
 	 * Get user in on channel
 	 *

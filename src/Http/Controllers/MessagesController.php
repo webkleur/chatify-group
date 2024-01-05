@@ -150,6 +150,7 @@ class MessagesController extends Controller
         }
 
         if (!$error->status) {
+            $lastMess = Message::where('to_channel_id', $request['channel_id'])->latest()->first();
             $message = Chatify::newMessage([
                 'from_id' => Auth::user()->id,
                 'to_channel_id' => $request['channel_id'],
@@ -159,7 +160,14 @@ class MessagesController extends Controller
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
                 ]) : null,
             ]);
-            $messageData = Chatify::parseMessage($message);
+
+            // load user info
+            $message->user_avatar = Auth::user()->avatar;
+            $message->user_name = Auth::user()->name;
+            $message->user_email = Auth::user()->email;
+
+            $messageData = Chatify::parseMessage($message, null, $lastMess && $lastMess->from_id !== Auth::user()->id);
+
             Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
                 'from_id' => Auth::user()->id,
                 'to_channel_id' => $request['channel_id'],
@@ -205,10 +213,12 @@ class MessagesController extends Controller
             return Response::json($response);
         }
         $allMessages = null;
+        $prevMess = null;
         foreach ($messages->reverse() as $message) {
             $allMessages .= Chatify::messageCard(
-                Chatify::parseMessage($message)
+                Chatify::parseMessage($message, null, $prevMess && $prevMess->from_id != $message->from_id)
             );
+            $prevMess = $message;
         }
         $response['messages'] = $allMessages;
         return Response::json($response);
