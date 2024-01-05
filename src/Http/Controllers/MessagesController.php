@@ -166,7 +166,7 @@ class MessagesController extends Controller
             $message->user_name = Auth::user()->name;
             $message->user_email = Auth::user()->email;
 
-            $messageData = Chatify::parseMessage($message, null, $lastMess && $lastMess->from_id !== Auth::user()->id);
+            $messageData = Chatify::parseMessage($message, null, $lastMess ? $lastMess->from_id !== Auth::user()->id : true);
 
             Chatify::push("private-chatify.".$request['channel_id'], 'messaging', [
                 'from_id' => Auth::user()->id,
@@ -216,7 +216,7 @@ class MessagesController extends Controller
         $prevMess = null;
         foreach ($messages->reverse() as $message) {
             $allMessages .= Chatify::messageCard(
-                Chatify::parseMessage($message, null, $prevMess && $prevMess->from_id != $message->from_id)
+                Chatify::parseMessage($message, null, $prevMess ? $prevMess->from_id != $message->from_id : true)
             );
             $prevMess = $message;
         }
