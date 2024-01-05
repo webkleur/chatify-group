@@ -346,13 +346,18 @@ class MessagesController extends Controller
         $favoritesList = null;
         $favorites = Favorite::where('user_id', Auth::user()->id);
         foreach ($favorites->get() as $favorite) {
-            $channel_id = $favorite->favorite_id;
+            $channel = Channel::find($favorite->favorite_id);
 
-            // get user data
-            $user = Chatify::getUserInOneChannel($channel_id);
+            $data = null;
+            if($channel->owner_id){
+                $data = Chatify::getChannelWithAvatar($channel);
+            } else {
+                $user = Chatify::getUserInOneChannel($channel->id);
+                $data = Chatify::getUserWithAvatar($user);
+            }
             $favoritesList .= view('Chatify::layouts.favorite', [
-                'user' => $user,
-                'channel_id' => $channel_id
+                'data' => $data,
+                'channel_id' => $channel->id
             ]);
         }
         // send the response
@@ -574,6 +579,13 @@ class MessagesController extends Controller
         $new_channel->save();
 
         $new_channel->users()->sync($user_ids);
+
+        // add first message
+        $message = new Message;
+        $message->from_id = Auth::user()->id;
+        $message->to_channel_id = $new_channel->id;
+        $message->body = Auth::user()->name . ' has created a new chat group: ' . $group_name;
+        $message->save();
 
         return Response::json([
             'status' => $success ? 1 : 0,
