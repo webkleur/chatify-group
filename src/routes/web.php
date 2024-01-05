@@ -1,12 +1,4 @@
 <?php
-/**
- * -----------------------------------------------------------------
- * NOTE : There is two routes has a name (user & group),
- * any change in these two route's name may cause an issue
- * if not modified in all places that used in (e.g Chatify class,
- * Controllers, chatify javascript file...).
- * -----------------------------------------------------------------
- */
 
 use Illuminate\Support\Facades\Route;
 
@@ -76,11 +68,6 @@ Route::post('/favorites', 'MessagesController@getFavorites')->name('favorites');
 Route::get('/search', 'MessagesController@search')->name('search');
 
 /**
- * Search users
- */
-Route::get('/search-users', 'MessagesController@searchUsers')->name('search.users');
-
-/**
  * Get shared photos
  */
 Route::post('/shared', 'MessagesController@sharedPhotos')->name('shared');
@@ -105,6 +92,15 @@ Route::post('/updateSettings', 'MessagesController@updateSettings')->name('avata
  */
 Route::post('/setActiveStatus', 'MessagesController@setActiveStatus')->name('activeStatus.set');
 
+/**
+ * Search users for group modal
+ */
+Route::get('/search-users', 'MessagesController@searchUsers')->name('group.search.users');
+
+/**
+ * Create a new group channel
+ */
+Route::post('/create-group-channel', 'MessagesController@createGroupChannel')->name('group-channel.create');
 
 
 

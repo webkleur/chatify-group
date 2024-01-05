@@ -284,23 +284,39 @@ class ChatifyMessenger
      */
     public function getContactItem($channel)
     {
-        try {
-            if($channel->id == Auth::user()->channel_id) return '';
+        if($channel->id == Auth::user()->channel_id) return ''; // myself channel | saved messages
 
-			$user = $this->getUserInOneChannel($channel->id);
-            $lastMessage = $this->getLastMessageQuery($channel->id);
-            $unseenCounter = $this->countUnseenMessages($channel->id);
-            if ($lastMessage) {
-                $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
-                $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
-            }
-            return view('Chatify::layouts.listItem', [
-                'get' => 'contacts',
-                'channel' => $channel,
-                'user' => $this->getUserWithAvatar($user),
-                'lastMessage' => $lastMessage,
-                'unseenCounter' => $unseenCounter,
+        try {
+            // check if this channel is a group
+            if(isset($channel->owner_id)){
+                $lastMessage = $this->getLastMessageQuery($channel->id);
+                $unseenCounter = $this->countUnseenMessages($channel->id);
+                if ($lastMessage) {
+                    $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
+                    $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
+                }
+                return view('Chatify::layouts.listItem', [
+                    'get' => 'contact-group',
+                    'channel' => $this->getChannelWithAvatar($channel),
+                    'lastMessage' => $lastMessage,
+                    'unseenCounter' => $unseenCounter,
                 ])->render();
+            } else {
+                $user = $this->getUserInOneChannel($channel->id);
+                $lastMessage = $this->getLastMessageQuery($channel->id);
+                $unseenCounter = $this->countUnseenMessages($channel->id);
+                if ($lastMessage) {
+                    $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
+                    $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
+                }
+                return view('Chatify::layouts.listItem', [
+                    'get' => 'contact-user',
+                    'channel' => $channel,
+                    'user' => $this->getUserWithAvatar($user),
+                    'lastMessage' => $lastMessage,
+                    'unseenCounter' => $unseenCounter,
+                ])->render();
+            }
         } catch (\Throwable $th) {
             throw new Exception($th->getMessage());
         }
@@ -322,6 +338,21 @@ class ChatifyMessenger
             $user->avatar = self::getUserAvatarUrl($user->avatar);
         }
         return $user;
+    }
+
+    /**
+     * Get user with avatar (formatted).
+     *
+     * @param Collection $channel
+     * @return Collection
+     */
+    public function getChannelWithAvatar($channel)
+    {
+        $imageSize = config('chatify.gravatar.image_size');
+        $imageset = config('chatify.gravatar.imageset');
+        $channel->avatar = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($channel->name))) . '?s=' . $imageSize . '&d=' . $imageset;
+
+        return $channel;
     }
 
     /**
@@ -349,8 +380,10 @@ class ChatifyMessenger
 	public function getOrCreateChannel(int $user_id)
 	{
 		$channel_user = DB::table('ch_channel_user')
+            ->join('ch_channels', 'ch_channel_user.channel_id', 'ch_channels.id')
 			->select('ch_channel_user.channel_id', DB::raw('count(ch_channel_user.user_id) as count_user'))
 			->whereIn('ch_channel_user.user_id', [$user_id, Auth::user()->id])
+            ->whereNull('ch_channels.owner_id') // group_channel has owner_id
 			->groupBy('ch_channel_user.channel_id')
 			->having('count_user', '=', 2)
 			->first();

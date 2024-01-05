@@ -67,15 +67,27 @@ class MessagesController extends Controller
      */
     public function idFetchData(Request $request)
     {
+        $fetch = null;
+        $channel_avatar = null;
+
         $favorite = Chatify::inFavorite($request['channel_id']);
-        $fetch = Chatify::getUserInOneChannel($request['channel_id']);
-        if($fetch){
-            $userAvatar = Chatify::getUserWithAvatar($fetch)->avatar;
+        $channel = Channel::find($request['channel_id']);
+
+        // check if this channel is a group
+        if(isset($channel->owner_id)){
+            $fetch = $channel;
+            $channel_avatar = Chatify::getChannelWithAvatar($channel)->avatar;
+        } else {
+            $fetch = Chatify::getUserInOneChannel($request['channel_id']);
+            if($fetch){
+                $channel_avatar = Chatify::getUserWithAvatar($fetch)->avatar;
+            }
         }
+
         return Response::json([
             'favorite' => $favorite,
             'fetch' => $fetch ?? null,
-            'user_avatar' => $userAvatar ?? null,
+            'channel_avatar' => $channel_avatar ?? null,
         ]);
     }
 
@@ -373,37 +385,6 @@ class MessagesController extends Controller
     }
 	
 	/**
-	 * Search users
-	 *
-	 * @param Request $request
-	 * @return JsonResponse|void
-	 */
-	public function searchUsers(Request $request)
-	{
-		$getRecords = null;
-		$input = trim(filter_var($request['input']));
-		$records = User::where('id','!=',Auth::user()->id)
-			->where('name', 'LIKE', "%{$input}%")
-			->paginate($request->per_page ?? $this->perPage);
-		foreach ($records->items() as $record) {
-			$getRecords .= view('Chatify::layouts.listItem', [
-				'get' => 'user_search_item',
-				'user' => Chatify::getUserWithAvatar($record),
-			])->render();
-		}
-		if($records->total() < 1){
-			$getRecords = '<p class="message-hint"><span>Nothing to show.</span></p>';
-		}
-		// send the response
-		return Response::json([
-			'records' => $getRecords,
-			'total' => $records->total(),
-			'last_page' => $records->lastPage()
-		], 200);
-	}
-
-	
-	/**
      * Get shared photos
      *
      * @param Request $request
@@ -532,4 +513,64 @@ class MessagesController extends Controller
             'status' => $status,
         ], 200);
     }
+
+    /**
+     * Search users
+     *
+     * @param Request $request
+     * @return JsonResponse|void
+     */
+    public function searchUsers(Request $request)
+    {
+        $getRecords = array();
+        $input = trim(filter_var($request['input']));
+        $records = User::where('id','!=',Auth::user()->id)
+            ->where('name', 'LIKE', "%{$input}%")
+            ->paginate($request->per_page ?? $this->perPage);
+        foreach ($records->items() as $record) {
+            $getRecords[] = array(
+                "user" => $record,
+                "view" => view('Chatify::layouts.listItem', [
+                    'get' => 'user_search_item',
+                    'user' => Chatify::getUserWithAvatar($record),
+                ])->render()
+            );
+        }
+        if($records->total() < 1){
+            $getRecords = '<p class="message-hint"><span>Nothing to show.</span></p>';
+        }
+        // send the response
+        return Response::json([
+            'records' => $getRecords,
+            'total' => $records->total(),
+            'last_page' => $records->lastPage()
+        ], 200);
+    }
+
+
+    public function createGroupChannel(Request $request)
+    {
+        $msg = null;
+        $error = $success = 0;
+
+        $user_ids = array_map('intval', explode(',', $request['user_ids']));
+        $user_ids[] = Auth::user()->id;
+
+        $group_name = $request['group_name'];
+
+        $new_channel = new Channel();
+        $new_channel->name = $group_name;
+        $new_channel->owner_id = Auth::user()->id;
+        $new_channel->save();
+
+        $new_channel->users()->sync($user_ids);
+
+        return Response::json([
+            'status' => $success ? 1 : 0,
+            'error' => $error ? 1 : 0,
+            'message' => $error ? $msg : 0,
+            'channel' => $new_channel
+        ], 200);
+    }
+
 }
