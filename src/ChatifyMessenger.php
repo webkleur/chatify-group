@@ -360,10 +360,13 @@ class ChatifyMessenger
      */
     public function getChannelWithAvatar($channel)
     {
-        $imageSize = config('chatify.gravatar.image_size');
-        $imageset = config('chatify.gravatar.imageset');
-        $channel->avatar = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($channel->name))) . '?s=' . $imageSize . '&d=' . $imageset;
-
+        if ($channel->avatar == 'avatar.png' && config('chatify.gravatar.enabled')) {
+            $imageSize = config('chatify.gravatar.image_size');
+            $imageset = config('chatify.gravatar.imageset');
+            $channel->avatar = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($channel->name))) . '?s=' . $imageSize . '&d=' . $imageset;
+        } else {
+            $channel->avatar = self::getChannelAvatarUrl($channel->avatar);
+        }
         return $channel;
     }
 
@@ -571,6 +574,17 @@ class ChatifyMessenger
     public function getUserAvatarUrl($user_avatar_name)
     {
         return self::storage()->url(config('chatify.user_avatar.folder') . '/' . $user_avatar_name);
+    }
+
+    /**
+     * Get user avatar url.
+     *
+     * @param string $channel_avatar_name
+     * @return string
+     */
+    public function getChannelAvatarUrl($channel_avatar_name)
+    {
+        return self::storage()->url(config('chatify.channel_avatar.folder') . '/' . $channel_avatar_name);
     }
 
     /**

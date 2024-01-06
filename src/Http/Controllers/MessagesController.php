@@ -577,7 +577,6 @@ class MessagesController extends Controller
         $new_channel->name = $group_name;
         $new_channel->owner_id = Auth::user()->id;
         $new_channel->save();
-
         $new_channel->users()->sync($user_ids);
 
         // add first message
@@ -586,6 +585,30 @@ class MessagesController extends Controller
         $message->to_channel_id = $new_channel->id;
         $message->body = Auth::user()->name . ' has created a new chat group: ' . $group_name;
         $message->save();
+
+
+        // if there is a [file]
+        if ($request->hasFile('avatar')) {
+            // allowed extensions
+            $allowed_images = Chatify::getAllowedImages();
+
+            $file = $request->file('avatar');
+            // check file size
+            if ($file->getSize() < Chatify::getMaxUploadSize()) {
+                if (in_array(strtolower($file->extension()), $allowed_images)) {
+                    $avatar = Str::uuid() . "." . $file->extension();
+                    $update = $new_channel->update(['avatar' => $avatar]);
+                    $file->storeAs(config('chatify.channel_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
+                    $success = $update ? 1 : 0;
+                } else {
+                    $msg = "File extension not allowed!";
+                    $error = 1;
+                }
+            } else {
+                $msg = "File size you are trying to upload is too large!";
+                $error = 1;
+            }
+        }
 
         return Response::json([
             'status' => $success ? 1 : 0,
