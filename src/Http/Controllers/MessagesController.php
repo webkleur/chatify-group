@@ -74,6 +74,16 @@ class MessagesController extends Controller
         $favorite = Chatify::inFavorite($request['channel_id']);
         $channel = Channel::find($request['channel_id']);
 
+        if(!$channel) return Response::json([
+            'message' => "This chat channel doesn't exist!"
+        ]);
+
+        $allow_loading = $channel->owner_id === Auth::user()->id
+            || in_array(Auth::user()->id, $channel->users()->pluck('id')->all());
+        if(!$allow_loading) return Response::json([
+            'message' => "You haven't joined this chat channel!"
+        ]);
+
         // check if this channel is a group
         if(isset($channel->owner_id)){
             $fetch = $channel;
@@ -480,11 +490,11 @@ class MessagesController extends Controller
         $channel_id = $request['channel_id'];
         $user_id = $request['user_id'];
 
-        $channel = Channel::findOrFail($channel_id);
-        $channel->users()->detach($user_id);
-
         // add last message
         Chatify::addMessageToChannel(Auth::user()->id, $channel_id, Auth::user()->name . ' has left the group');
+
+        $channel = Channel::findOrFail($channel_id);
+        $channel->users()->detach($user_id);
 
         // send the response
         return Response::json([
