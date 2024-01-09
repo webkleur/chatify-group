@@ -98,9 +98,13 @@ Route::post('/setActiveStatus', 'MessagesController@setActiveStatus')->name('act
 Route::get('/search-users', 'MessagesController@searchUsers')->name('group.search.users');
 
 /**
- * Create a new group channel
+ * Group Chat
  */
-Route::post('/create-group-channel', 'MessagesController@createGroupChannel')->name('group-channel.create');
+Route::name('group-chat.')->prefix('group-chat')->group(function () {
+    Route::post('/create', 'MessagesController@createGroupChat')->name('create');
+    Route::post('/delete', 'MessagesController@deleteGroupChat')->name('delete');
+    Route::post('/leave', 'MessagesController@leaveGroupChat')->name('delete');
+});
 
 
 

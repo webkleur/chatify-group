@@ -447,6 +447,52 @@ class MessagesController extends Controller
     }
 
     /**
+     * Delete group chat
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function deleteGroupChat(Request $request)
+    {
+        $channel_id = $request['channel_id'];
+
+
+        $channel = Channel::findOrFail($channel_id);
+        $channel->users()->detach();
+
+        Chatify::deleteConversation($channel_id);
+
+
+        // send the response
+        return Response::json([
+            'deleted' => $channel->delete(),
+        ], 200);
+    }
+
+    /**
+     * Leave group chat
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function leaveGroupChat(Request $request)
+    {
+        $channel_id = $request['channel_id'];
+        $user_id = $request['user_id'];
+
+        $channel = Channel::findOrFail($channel_id);
+        $channel->users()->detach($user_id);
+
+        // add last message
+        Chatify::addMessageToChannel(Auth::user()->id, $channel_id, Auth::user()->name . ' has left the group');
+
+        // send the response
+        return Response::json([
+            'left' => $channel ? 1 : 0,
+        ], 200);
+    }
+
+    /**
      * Delete message
      *
      * @param Request $request
@@ -569,7 +615,7 @@ class MessagesController extends Controller
     }
 
 
-    public function createGroupChannel(Request $request)
+    public function createGroupChat(Request $request)
     {
         $msg = null;
         $error = $success = 0;
@@ -586,11 +632,7 @@ class MessagesController extends Controller
         $new_channel->users()->sync($user_ids);
 
         // add first message
-        $message = new Message;
-        $message->from_id = Auth::user()->id;
-        $message->to_channel_id = $new_channel->id;
-        $message->body = Auth::user()->name . ' has created a new chat group: ' . $group_name;
-        $message->save();
+        Chatify::addMessageToChannel(Auth::user()->id, $new_channel->id, Auth::user()->name . ' has created a new chat group: ' . $group_name);
 
 
         // if there is a [file]

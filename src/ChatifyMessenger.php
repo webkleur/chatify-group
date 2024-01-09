@@ -557,6 +557,23 @@ class ChatifyMessenger
     }
 
     /**
+     * Add Message to channel
+     *
+     * @param int $from_id
+     * @param string $channel_id
+     * @param string $message
+     * @return Message
+     */
+    public function addMessageToChannel(int $from_id, string $channel_id, string $message)
+    {
+        $data = new Message;
+        $data->from_id = $from_id;
+        $data->to_channel_id = "${channel_id}";
+        $data->body = "${message}";
+        $data->save();
+    }
+
+    /**
      * Return a storage instance with disk name specified in the config.
      *
      */
