@@ -53,6 +53,7 @@ class MessagesController extends Controller
 
         return view('Chatify::pages.app', [
             'channel_id' => $channel_id ?? 0,
+            'channel' => $channel_id ? Channel::where('id', $channel_id)->first() : null,
             'messengerColor' => $messenger_color ? $messenger_color : Chatify::getFallbackColor(),
             'dark_mode' => Auth::user()->dark_mode < 1 ? 'light' : 'dark',
         ]);
@@ -84,7 +85,12 @@ class MessagesController extends Controller
             }
         }
 
+        $infoHtml = view('Chatify::layouts.info', [
+            'channel' => $channel,
+        ])->render();
+
         return Response::json([
+            'infoHtml' => $infoHtml,
             'favorite' => $favorite,
             'fetch' => $fetch ?? null,
             'channel_avatar' => $channel_avatar ?? null,
