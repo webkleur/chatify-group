@@ -390,7 +390,7 @@ class ChatifyMessenger
 	 * Get user in on channel
 	 *
 	 * @param int $user_id
-	 * @return string
+	 * @return object
 	 */
 	public function getOrCreateChannel(int $user_id)
 	{
@@ -409,10 +409,16 @@ class ChatifyMessenger
 
 			$new_channel->users()->sync([$user_id, Auth::user()->id]);
 
-			return $new_channel->id;
+			return (object)[
+                'channel_id' => $new_channel->id,
+                'type' => 'new_channel'
+            ];
 		}
 
-		return $channel_user->channel_id;
+        return (object)[
+            'channel_id' => $channel_user->channel_id,
+            'type' => 'channel'
+        ];
 	}
 
 	/**
@@ -554,23 +560,6 @@ class ChatifyMessenger
         } catch (Exception $e) {
             throw new Exception($e->getMessage());
         }
-    }
-
-    /**
-     * Add Message to channel
-     *
-     * @param int $from_id
-     * @param string $channel_id
-     * @param string $message
-     * @return Message
-     */
-    public function addMessageToChannel(int $from_id, string $channel_id, string $message)
-    {
-        $data = new Message;
-        $data->from_id = $from_id;
-        $data->to_channel_id = "${channel_id}";
-        $data->body = "${message}";
-        $data->save();
     }
 
     /**

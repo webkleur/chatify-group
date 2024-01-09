@@ -324,12 +324,10 @@ class MessagesController extends Controller
 	public function getChannelId(Request $request)
 	{
 		$user_id = $request['user_id'];
-		$channel_id = Chatify::getOrCreateChannel($user_id);
+		$res = Chatify::getOrCreateChannel($user_id);
 		
 		// send the response
-		return Response::json([
-			'channel_id' => $channel_id,
-		], 200);
+		return Response::json($res, 200);
 	}
 	
     /**
@@ -491,8 +489,25 @@ class MessagesController extends Controller
         $user_id = $request['user_id'];
 
         // add last message
-        Chatify::addMessageToChannel(Auth::user()->id, $channel_id, Auth::user()->name . ' has left the group');
+        $message = Chatify::newMessage([
+            'from_id' => Auth::user()->id,
+            'to_channel_id' => $channel_id,
+            'body' => Auth::user()->name . ' has left the group',
+            'attachment' => null,
+        ]);
+        $message->user_avatar = Auth::user()->avatar;
+        $message->user_name = Auth::user()->name;
+        $message->user_email = Auth::user()->email;
 
+        $messageData = Chatify::parseMessage($message, null);
+
+        Chatify::push("private-chatify.".$channel_id, 'messaging', [
+            'from_id' => Auth::user()->id,
+            'to_channel_id' => $channel_id,
+            'message' => Chatify::messageCard($messageData, true)
+        ]);
+
+        // detach user
         $channel = Channel::findOrFail($channel_id);
         $channel->users()->detach($user_id);
 
@@ -642,7 +657,21 @@ class MessagesController extends Controller
         $new_channel->users()->sync($user_ids);
 
         // add first message
-        Chatify::addMessageToChannel(Auth::user()->id, $new_channel->id, Auth::user()->name . ' has created a new chat group: ' . $group_name);
+        $message = Chatify::newMessage([
+            'from_id' => Auth::user()->id,
+            'to_channel_id' => $new_channel->id,
+            'body' => Auth::user()->name . ' has created a new chat group: ' . $group_name,
+            'attachment' => null,
+        ]);
+        $message->user_name = Auth::user()->name;
+        $message->user_email = Auth::user()->email;
+
+        $messageData = Chatify::parseMessage($message, null);
+        Chatify::push("private-chatify.".$new_channel->id, 'messaging', [
+            'from_id' => Auth::user()->id,
+            'to_channel_id' => $new_channel->id,
+            'message' => Chatify::messageCard($messageData, true)
+        ]);
 
 
         // if there is a [file]
