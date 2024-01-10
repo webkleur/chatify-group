@@ -9,6 +9,11 @@ use Chatify\Traits\UUID;
 class ChChannel extends Model
 {
     use UUID;
+
+    protected $fillable = [
+        'avatar'
+    ];
+
 	public function users(){
 		return $this->belongsToMany(User::class, 'ch_channel_user', 'channel_id', 'user_id');
 	}
